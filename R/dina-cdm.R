@@ -1,6 +1,6 @@
 dinaCDM <- function(Y, Q, estimation_method = "BM", 
-                    prior = NULL, mcmc_options = NULL,
-                    optim_options = NULL,
+                    prior = NULL, optim_options = NULL,
+                    mcmc_options = NULL,
                     mono_constraint = TRUE,
                     reduced = FALSE){
   
@@ -22,6 +22,62 @@ dinaCDM <- function(Y, Q, estimation_method = "BM",
   
   if (!(estimation_method %in% c("EM", "BM", "MCMC"))){
     stop("estimation_method must be either EM, BM, or MCMC")
+  }
+  
+  if (is.null(prior)){
+    
+    prior <- list(delta = rep(1, 2^K))
+    
+    if (reduced){
+      
+      prior$slip_a <- prior$slip_b <- 1
+      prior$guess_a <- prior$guess_b <- 1
+      
+    } else {
+      
+      prior$slip_a <- prior$slip_b <- rep(1, J)
+      prior$guess_a <- prior$guess_b <- rep(1, J)
+      
+    }
+  } else {
+    
+    if (!is.list(prior)){
+      stop("prior must be a list containing values for delta, slip_a, slip_b,
+             guess_a, and guess_b.")
+    }
+    
+    prior_lengths <- sapply(prior, length)
+    prior_names <- c("delta", "slip_a", "slip_b", "guess_a", "guess_b")
+    
+    if (!all(prior_names %in% names(prior))){
+      stop("prior must be a list with following names: 
+             delta, slip_a, slip_b, guess_a, guess_b")
+    }
+    
+    if (reduced){
+      
+      if (!all(prior_lengths == c(2^K, 1, 1, 1, 1))){
+        stop("For reduced model, prior must be a list with five elements 
+               for hyperparameters delta, slip_a, slip_b, guess_a, guess_b
+               with respective lengths of 2^K, 1, 1, 1, 1.")
+      }
+    } else {
+      if (!all(prior_lengths) == c(2^K, J, J, J, J)){
+        stop("For reduced model, prior must be a list with five elements 
+               for hyperparameters delta, slip_a, slip_b, guess_a, guess_b
+               with respective lengths of 2^K, J, J, J, J.")
+      }
+    }
+    
+    if (any(delta <= 0) | any(slip_a) <= 0 | any(slip_b) <= 0){
+      stop("Values for prior parameters must be greater than 0.")
+    }
+    
+    if (estimation_method == "EM"){
+      
+      estimation_method == "BM"
+      warning("Changing estimation method to BM since prior is not NULL.")
+    }
   }
   
   if (estimation_method %in% c("EM", "BM")){
@@ -52,63 +108,6 @@ dinaCDM <- function(Y, Q, estimation_method = "BM",
     }
   } 
   
-  if (estimation_method %in% c("BM", "MCMC")){
-    
-    if (is.null(prior)){
-      
-      prior <- list(delta = rep(1, 2^K))
-      
-      if (reduced){
-        
-        prior$slip_a <- 1
-        prior$slip_b <- 1
-        prior$guess_a <- 1
-        prior$guess_b <- 1
-        
-      } else {
-        
-        prior$slip_a <- rep(1, J)
-        prior$slip_b <- rep(1, J)
-        prior$guess_a <- rep(1, J)
-        prior$guess_b <- rep(1, J)
-        
-      }
-    } else {
-      
-      if (!is.list(prior)){
-        stop("prior must be a list containing values for delta, slip_a, slip_b,
-             guess_a, and guess_b.")
-      }
-      
-      prior_lengths <- sapply(prior, length)
-      prior_names <- c("delta", "slip_a", "slip_b", "guess_a", "guess_b")
-      
-      if (!all(prior_names %in% names(prior))){
-        stop("prior must be a list with following names: 
-             delta, slip_a, slip_b, guess_a, guess_b")
-      }
-      
-      if (reduced){
-        
-        if (!all(prior_lengths == c(2^K, 1, 1, 1, 1))){
-          stop("For reduced model, prior must be a list with five elements 
-               for hyperparameters delta, slip_a, slip_b, guess_a, guess_b
-               with respective lengths of 2^K, 1, 1, 1, 1.")
-        }
-      } else {
-        if (!all(prior_lengths) == c(2^K, J, J, J, J)){
-          stop("For reduced model, prior must be a list with five elements 
-               for hyperparameters delta, slip_a, slip_b, guess_a, guess_b
-               with respective lengths of 2^K, J, J, J, J.")
-        }
-      }
-    
-      if (any(delta <= 0) | any(slip_a) <= 0 | any(slip_b) <= 0){
-        stop("Values for prior parameters must be greater than 0.")
-      }
-    }
-  }
-  
   if (estimation_method == "MCMC"){
     
     if (is.null(mcmc_options)){
@@ -137,37 +136,17 @@ dinaCDM <- function(Y, Q, estimation_method = "BM",
     }
   }
   
-  if (estimation_method == "EM"){
+  if (estimation_method %in% c("EM", "BM")){
     
     epsilon <- optim_options$epsilon
     max_iter <- optim_options$max_iter
     
-    dina_fit <- dinaEM(Y, Q, epsilon, max_iter, mono_constraint, reduced)
+    dina_fit <- dinaBM(Y, Q, epsilon, max_iter, delta,
+                       slip_a, slip_b, guess_a, guess_b,
+                       mono_constraint, reduced)
     
-  } else if (estimation_method == "BM"){
-    
-    epsilon <- optim_options$epsilon
-    max_iter <- optim_options$max_iter
-    
-    delta <- prior$delta
-    slip_a <- prior$slip_a
-    slip_b <- prior$slip_b
-    guess_a <- prior$guess_a
-    guess_b <- prior$guess_b
-    
-    niter <- mcmc_options$niter
-    nburn <- mcmc_options$nburn
-    
-    dina_fit <- dinaBM(Y, Q, epsilon, max_iter, delta, slip_a, slip_b,
-                       guess_a, guess_b, niter, nburn, mono_constraint, reduced)
   } else {
-    
-    delta <- prior$delta
-    slip_a <- prior$slip_a
-    slip_b <- prior$slip_b
-    guess_a <- prior$guess_a
-    guess_b <- prior$guess_b
-    
+  
     niter <- mcmc_options$niter
     nburn <- mcmc_options$nburn
     
